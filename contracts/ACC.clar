@@ -28,3 +28,34 @@
         target: principal,
         expires: uint,
         executed: bool
+
+    }
+)
+
+;; Initialize contract deployer as first admin
+(map-set admins tx-sender { active: true })
+
+;; Read-only function to check if an address is admin
+(define-read-only (is-admin (address principal))
+    (default-to false (get active (map-get? admins address)))
+)
+
+;; Read-only function to validate action type
+(define-read-only (is-valid-action-type (action-type (string-ascii 20)))
+    (is-eq action-type ACTION_TYPE_ASSIGN_ROLE)
+)
+
+;; Propose a new admin
+(define-public (propose-admin (new-admin principal))
+    (begin
+        (asserts! (is-admin tx-sender) (err ERR_NOT_ADMIN))
+        (asserts! (is-none (map-get? admins new-admin)) (err ERR_ADMIN_ALREADY_EXISTS))
+        
+        (map-set pending-admins
+            new-admin
+            { 
+                proposer: tx-sender,
+                expires: (+ block-height u144) ;; 24 hour window (assuming 10 min blocks)
+            }
+        )
+        (ok true)
