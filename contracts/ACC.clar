@@ -59,3 +59,70 @@
             }
         )
         (ok true)
+    )
+)
+
+;; Accept admin role (must be called by proposed admin)
+(define-public (accept-admin)
+    (let (
+        (pending-info (unwrap! (map-get? pending-admins tx-sender) (err ERR_NOT_ADMIN)))
+    )
+        (asserts! (< block-height (get expires pending-info)) (err ERR_ACTION_TIMEOUT))
+        (map-set admins tx-sender { active: true })
+        (map-delete pending-admins tx-sender)
+        (ok true)
+    )
+)
+
+;; Propose an admin action (like assigning roles)
+(define-public (propose-admin-action (action-type (string-ascii 20)) (target principal))
+    (begin
+        ;; Validate inputs
+        (asserts! (is-valid-action-type action-type) (err ERR_INVALID_ACTION_TYPE))
+        (asserts! (not (is-eq target tx-sender)) (err ERR_INVALID_TARGET))
+        
+        ;; Check admin status
+        (asserts! (is-admin tx-sender) (err ERR_NOT_ADMIN))
+        
+        ;; Create action
+        (let (
+            (action-id block-height)
+        )
+            (map-set admin-actions
+                action-id
+    {
+                    proposer: tx-sender,
+                    action-type: action-type,
+                    target: target,
+                    expires: (+ block-height u144),
+                    executed: false
+                }
+            )
+            (ok action-id)
+        )
+    )
+)
+
+;; Execute an admin action (requires different admin than proposer)
+(define-public (execute-admin-action (action-id uint))
+    (let (
+        (action (unwrap! (map-get? admin-actions action-id) 
+                        (err ERR_INVALID_ADMIN_ACTION)))
+    )
+        (asserts! (is-admin tx-sender) (err ERR_NOT_ADMIN))
+        (asserts! (not (is-eq tx-sender (get proposer action))) (err ERR_NOT_ADMIN))
+        (asserts! (< block-height (get expires action)) (err ERR_ACTION_TIMEOUT))
+        (asserts! (not (get executed action)) (err ERR_INVALID_ADMIN_ACTION))
+        
+        (if (is-eq (get action-type action) ACTION_TYPE_ASSIGN_ROLE)
+            (assign-role-internal (get target action))
+            (err ERR_INVALID_ADMIN_ACTION))
+    )
+)
+  ;; Internal function to assign roles (called by execute-admin-action)
+(define-private (assign-role-internal (target principal))
+    (begin
+        ;; Your role assignment logic here
+        (ok true)
+    )
+)
